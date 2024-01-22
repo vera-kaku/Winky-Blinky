@@ -4,7 +4,7 @@ import numpy as np
 import time
 import math
 
-BLINK_GAP = 2
+BLINK_GAP = 8
 DEFAULT_EYE_BLINK_THRESHOLD = 3.4
 DEFAULT_EYEBROW_BLINK_THRESHOLD = 2.3
 
@@ -14,6 +14,9 @@ LEFT_EYEBROW_RATIO_CACHE = []
 RIGHT_EYEBROW_RATIO_CACHE = []
 
 # 初始化
+# cap = cv2.VideoCapture("test1.MOV")
+# cap = cv2.VideoCapture("test2.MOV")
+# cap = cv2.VideoCapture("test3.MOV")
 cap = cv2.VideoCapture(0)
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh()
@@ -128,7 +131,7 @@ def eye_blink_detection(landmarks):
     average_left_ratio = sum(LEFT_EYE_RATIO_CACHE[-20:])/20
     average_right_ratio = sum(RIGHT_EYE_RATIO_CACHE[-20:])/20
     if len(LEFT_EYE_RATIO_CACHE) == 100 and len(RIGHT_EYE_RATIO_CACHE) == 100:
-        threshold = (average_left_ratio + average_right_ratio) / 2 + 0.5
+        threshold = (average_left_ratio + average_right_ratio) / 2 * 1.1
     else:
         threshold = DEFAULT_EYE_BLINK_THRESHOLD
 
@@ -226,13 +229,21 @@ while cap.isOpened():
                 face_landmarks.landmark, height, width
             )
 
+            cv2.putText(frame, f"Left Ratio: {left_ratio:.2f}", (250, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+            left_eye_graph = draw_heartbeat(LEFT_EYE_RATIO_CACHE, 200, 100)
+            cv2.putText(frame, f"Right Ratio: {right_ratio:.2f}", (250, 160), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+            right_eye_graph = draw_heartbeat(RIGHT_EYE_RATIO_CACHE, 200, 100)
+            frame[0:100, 0:200] = left_eye_graph
+            frame[100:200, 0:200] = right_eye_graph
+    
             # 检查两种方法是否都检测到眨眼
             # if eye_ratio > eye_threshold and eyebrow_ratio < eyebrow_threshold:
             if eye_ratio > eye_threshold:
                 last_blink_time = time.time()
                 show_emoji = False
 
-    if time.time() - last_blink_time > BLINK_GAP and not show_emoji:
+    since_last_blink = time.time() - last_blink_time
+    if since_last_blink > BLINK_GAP and not show_emoji:
         show_emoji = True
         
     if show_emoji:
@@ -245,12 +256,8 @@ while cap.isOpened():
                 frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS
             )
 
-    cv2.putText(frame, f"Left Ratio: {left_ratio:.2f}", (250, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 1)
-    left_eye_graph = draw_heartbeat(LEFT_EYE_RATIO_CACHE, 200, 100)
-    cv2.putText(frame, f"Right Ratio: {right_ratio:.2f}", (250, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 1)
-    right_eye_graph = draw_heartbeat(RIGHT_EYE_RATIO_CACHE, 200, 100)
-    frame[0:100, 0:200] = left_eye_graph
-    frame[100:200, 0:200] = right_eye_graph
+    cv2.putText(frame, f"Since Last Blink: {since_last_blink:.2f}s", (10, 260), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+    cv2.putText(frame, f"Blink Gap: {BLINK_GAP}s", (frame.shape[1] - 460, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
 
     cv2.imshow("Frame", frame)
     if cv2.waitKey(5) & 0xFF == ord("q"):
