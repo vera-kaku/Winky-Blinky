@@ -51,6 +51,23 @@ def display_emoji(frame):
         )
     return frame
 
+def draw_heartbeat(data, width, height):
+    graph = np.zeros((height, width, 3), dtype=np.uint8)
+
+    for i in range(1, len(data)):
+        # Normalize data (range 2-4) to fit in the graph
+        # First, shift down by 2, then scale by dividing by 2 (the new max)
+        # normalized_y1 = (data[i - 1] - 2) / 2
+        # normalized_y2 = (data[i] - 2) / 2
+        normalized_y1 = (data[i - 1] - 1) / 4
+        normalized_y2 = (data[i] - 1) / 4
+
+        x1, y1 = (i - 1) * 2, height - int(normalized_y1 * height)
+        x2, y2 = i * 2, height - int(normalized_y2 * height)
+        cv2.line(graph, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+    return graph
+
 # Blink ratio function
 def eye_blink_detection(landmarks):
     # Right eye
@@ -108,15 +125,14 @@ def eye_blink_detection(landmarks):
     RIGHT_EYE_RATIO_CACHE.append(reRatio)
     
     # calculate personalized blink threshold
-    average_left_ratio = sum(LEFT_EYE_RATIO_CACHE)/len(LEFT_EYE_RATIO_CACHE)
-    average_right_ratio = sum(RIGHT_EYE_RATIO_CACHE)/len(RIGHT_EYE_RATIO_CACHE)
+    average_left_ratio = sum(LEFT_EYE_RATIO_CACHE[-20:])/20
+    average_right_ratio = sum(RIGHT_EYE_RATIO_CACHE[-20:])/20
     if len(LEFT_EYE_RATIO_CACHE) == 100 and len(RIGHT_EYE_RATIO_CACHE) == 100:
         threshold = (average_left_ratio + average_right_ratio) / 2 + 0.5
     else:
         threshold = DEFAULT_EYE_BLINK_THRESHOLD
 
-    ratio = (reRatio + leRatio) / 2
-    return threshold, ratio
+    return threshold, leRatio, reRatio
 
 
 # Indices for right and left eyes
@@ -204,13 +220,15 @@ while cap.isOpened():
 
     if results.multi_face_landmarks:
         for face_landmarks in results.multi_face_landmarks:
-            eye_threshold, eye_ratio = eye_blink_detection(face_landmarks.landmark)
+            eye_threshold, left_ratio, right_ratio = eye_blink_detection(face_landmarks.landmark)
+            eye_ratio = (left_ratio + right_ratio) / 2
             eyebrow_threshold, eyebrow_ratio = eyebrow_blink_detection(
                 face_landmarks.landmark, height, width
             )
 
             # 检查两种方法是否都检测到眨眼
-            if eye_ratio > eye_threshold and eyebrow_ratio < eyebrow_threshold:
+            # if eye_ratio > eye_threshold and eyebrow_ratio < eyebrow_threshold:
+            if eye_ratio > eye_threshold:
                 last_blink_time = time.time()
                 show_emoji = False
 
@@ -226,6 +244,13 @@ while cap.isOpened():
             mp.solutions.drawing_utils.draw_landmarks(
                 frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS
             )
+
+    cv2.putText(frame, f"Left Ratio: {left_ratio:.2f}", (250, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 1)
+    left_eye_graph = draw_heartbeat(LEFT_EYE_RATIO_CACHE, 200, 100)
+    cv2.putText(frame, f"Right Ratio: {right_ratio:.2f}", (250, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 1)
+    right_eye_graph = draw_heartbeat(RIGHT_EYE_RATIO_CACHE, 200, 100)
+    frame[0:100, 0:200] = left_eye_graph
+    frame[100:200, 0:200] = right_eye_graph
 
     cv2.imshow("Frame", frame)
     if cv2.waitKey(5) & 0xFF == ord("q"):
