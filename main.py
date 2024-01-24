@@ -7,6 +7,8 @@ import math
 BLINK_GAP = 2
 DEFAULT_EYE_BLINK_THRESHOLD = 3
 
+SHOW_CONTOURS = False
+
 LEFT_EYE_RATIO_CACHE = []
 RIGHT_EYE_RATIO_CACHE = []
 LAST_BLINK = []
@@ -16,7 +18,14 @@ SHOW_EMOJI = []
 # cap = cv2.VideoCapture("test1.MOV")
 # cap = cv2.VideoCapture("test2.MOV")
 # cap = cv2.VideoCapture("test3.MOV")
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture("eyeblink8/1/26122013_223310_cam.avi")
+# cap = cv2.VideoCapture(1)
+
+frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+screen_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+screen_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+scaling_factor = (screen_width * screen_height) / (1080 * 960)
+
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(max_num_faces=3)
 
@@ -126,18 +135,18 @@ def eye_blink_detection(idx, landmarks):
     if len(RIGHT_EYE_RATIO_CACHE) < idx + 1:
         RIGHT_EYE_RATIO_CACHE.append([])
 
-    if len(LEFT_EYE_RATIO_CACHE[idx]) >= 100:
+    if len(LEFT_EYE_RATIO_CACHE[idx]) >= 80:
         LEFT_EYE_RATIO_CACHE[idx].pop(0)
     LEFT_EYE_RATIO_CACHE[idx].append(leRatio)
-    if len(RIGHT_EYE_RATIO_CACHE[idx]) >= 100:
+    if len(RIGHT_EYE_RATIO_CACHE[idx]) >= 80:
         RIGHT_EYE_RATIO_CACHE[idx].pop(0)
     RIGHT_EYE_RATIO_CACHE[idx].append(reRatio)
     
     # Calculate personalized blink threshold
     average_left_ratio = sum(LEFT_EYE_RATIO_CACHE[idx][-20:])/20
     average_right_ratio = sum(RIGHT_EYE_RATIO_CACHE[idx][-20:])/20
-    if len(LEFT_EYE_RATIO_CACHE[idx]) == 100 and len(RIGHT_EYE_RATIO_CACHE[idx]) == 100:
-        threshold = (average_left_ratio + average_right_ratio) / 2 * 1.1
+    if len(LEFT_EYE_RATIO_CACHE[idx]) == 80 and len(RIGHT_EYE_RATIO_CACHE[idx]) == 80:
+        threshold = (average_left_ratio + average_right_ratio) / 2 * 1.2
     else:
         threshold = DEFAULT_EYE_BLINK_THRESHOLD
 
@@ -159,13 +168,13 @@ while cap.isOpened():
             eye_threshold, left_ratio, right_ratio = eye_blink_detection(idx, face_landmarks.landmark)
             eye_ratio = (left_ratio + right_ratio) / 2
 
-            offset = idx * 300
-            cv2.putText(frame, f"Left Ratio: {left_ratio:.2f}", (250, 60 + offset), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
-            left_eye_graph = draw_heartbeat(LEFT_EYE_RATIO_CACHE[idx], 200, 100)
-            cv2.putText(frame, f"Right Ratio: {right_ratio:.2f}", (250, 160 + offset), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
-            right_eye_graph = draw_heartbeat(RIGHT_EYE_RATIO_CACHE[idx], 200, 100)
-            frame[0 + offset:100 + offset, 0:200] = left_eye_graph
-            frame[100 + offset:200 + offset, 0:200] = right_eye_graph
+            offset = idx * 240
+            left_eye_graph = draw_heartbeat(LEFT_EYE_RATIO_CACHE[idx], 160, 80)
+            right_eye_graph = draw_heartbeat(RIGHT_EYE_RATIO_CACHE[idx], 160, 80)
+            frame[0 + offset:80 + offset, 0:160] = left_eye_graph
+            frame[80 + offset:160 + offset, 0:160] = right_eye_graph
+            cv2.putText(frame, f"Left Ratio: {left_ratio:.2f}", (180, 40 + offset), cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
+            cv2.putText(frame, f"Right Ratio: {right_ratio:.2f}", (180, 120 + offset), cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
 
             if len(LAST_BLINK) < idx + 1:
                 LAST_BLINK.append(time.time())
@@ -185,23 +194,36 @@ while cap.isOpened():
             if SHOW_EMOJI[idx]:
                 frame = display_emoji(frame, face_landmarks.landmark)
 
-            if len(LEFT_EYE_RATIO_CACHE[idx]) >= 100 or len(RIGHT_EYE_RATIO_CACHE[idx]) >= 100:            
-                cv2.putText(frame, f"Since Last Blink: {since_last_blink:.2f}s", (10, 260 + idx * 300), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+            if len(LEFT_EYE_RATIO_CACHE[idx]) >= 80 or len(RIGHT_EYE_RATIO_CACHE[idx]) >= 80:            
+                cv2.putText(frame, f"Since Last Blink: {since_last_blink:.2f}s", (10, 200 + idx * 240), cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
             else:
-                cv2.putText(frame, f"Since Last Blink: Calibrating...", (10, 260 + idx * 300), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+                cv2.putText(frame, f"Since Last Blink: Calibrating...", (10, 200 + idx * 240), cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
 
             # Draw face contours
-            # mp.solutions.drawing_utils.draw_landmarks(
-            #     frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS
-            # )
+            if SHOW_CONTOURS:
+                mp.solutions.drawing_utils.draw_landmarks(frame, face_landmarks, mp_face_mesh.FACEMESH_CONTOURS)
 
             idx += 1
 
-    cv2.putText(frame, f"Blink Gap: {BLINK_GAP}s", (frame.shape[1] - 460, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 2)
+    top_right_position = (screen_width - 10 - cv2.getTextSize(f"Blink Gap: {BLINK_GAP}s", cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, 2)[0][0], 30)
+    cv2.putText(frame, f"Blink Gap: {BLINK_GAP}s", top_right_position, cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
+
+    bottom_left_position1 = (10, int(screen_height - 50 * scaling_factor))
+    cv2.putText(frame, f"Press 'q' or ESC to quit", bottom_left_position1, cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
+    bottom_left_position2 = (10, int(screen_height - 100 * scaling_factor))
+    cv2.putText(frame, f"Press 't' to toggle face contour", bottom_left_position2, cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
+    bottom_left_position3 = (10, int(screen_height - 150 * scaling_factor))
+    cv2.putText(frame, f"Press number to set blink gap", bottom_left_position3, cv2.FONT_HERSHEY_SIMPLEX, 2 * scaling_factor, (255,255,255), 2)
 
     cv2.imshow("Frame", frame)
-    if cv2.waitKey(5) & 0xFF == ord("q"):
+    
+    key = cv2.waitKey(1000 // frame_rate) & 0xFF
+    if key == ord("q") or key == 27:
         break
+    elif key == ord("t"):
+        SHOW_CONTOURS = not SHOW_CONTOURS
+    elif ord("1") <= key <= ord("9"):
+        BLINK_GAP = int(chr(key))
 
 cap.release()
 cv2.destroyAllWindows()
